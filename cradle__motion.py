@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from typing import List, Protocol, Optional, Tuple
 import numpy as np
 import csv  
+from visualise_magnetic_cradle import save_result_npz 
 
 
 # ----------------------------
@@ -64,7 +65,7 @@ class DipoleDipoleSoftened:
             ri = positions[i]
             mi = dipoles[i]
             for j in range(i + 1, N):
-                R = positions[j] - ri
+                R = ri - positions[j] #Modified 
                 r2 = float(np.dot(R, R))
                 if self.pair_cutoff is not None and r2 > self.pair_cutoff * self.pair_cutoff:
                     continue
@@ -170,6 +171,7 @@ class PlanarPendulumChain:
         params: PendulumChainParams,
         dipole_magnitude: float,        # A·m^2
         interactions: Optional[List[Interaction]] = None,
+        dipole_signs: Optional[np.ndarray] = None,
     ):
         self.p = params
         self.m_d = float(dipole_magnitude)
@@ -179,6 +181,15 @@ class PlanarPendulumChain:
         self.pivots = np.zeros((self.p.N, 3), dtype=float)
         for i in range(self.p.N):
             self.pivots[i] = np.array([i * self.p.d, 0.0, 0.0], dtype=float)
+
+        if dipole_signs is None:
+            # Default: alternating +1, -1, +1, -1, ...
+            self.dipole_signs = np.array([1.0 if (i % 2 == 0) else -1.0 for i in range(self.p.N)])
+        else:
+            dipole_signs = np.asarray(dipole_signs, dtype=float)
+            if dipole_signs.shape != (self.p.N,):
+                raise ValueError("dipole_signs must have shape (N,)")
+            self.dipole_signs = dipole_signs
 
     # --- Geometry helpers ---
 
@@ -194,7 +205,10 @@ class PlanarPendulumChain:
         return np.column_stack([np.cos(theta), np.sin(theta), np.zeros_like(theta)])
 
     def dipoles(self, theta: np.ndarray) -> np.ndarray:
-        return self.m_d * self.t_hat(theta)
+        # Tangential unit vectors (N,3)
+        th = self.t_hat(theta)
+        # Apply alternating sign per bob
+        return (self.dipole_signs[:, None] * self.m_d) * th
 
     # --- Dynamics ---
 
@@ -273,11 +287,14 @@ class PlanarPendulumChain:
         out_omega = []
 
         t = 0.0
+        step_num = 0
         for s in range(steps):
+            step_num +=1
             if s % record_every == 0:
                 out_t.append(t)
                 out_theta.append(theta.copy())
                 out_omega.append(omega.copy())
+                print(f"{int(100 * step_num / steps)} % Done")
 
             theta, omega = self.step_rk4(theta, omega, dt)
             t += dt
@@ -292,10 +309,10 @@ class PlanarPendulumChain:
 
 if __name__ == "__main__":
     # --- Parameters (tweak these) ---
-    N = 2
+    N = 3
     params = PendulumChainParams(
         N=N,
-        m=0.05,          # 50 g bobs
+        m=0.01,          # 10 g bobs
         L=0.25,          # 25 cm pendulum
         d=0.05,          # 5 cm pivot spacing
         g=9.81,
@@ -303,7 +320,7 @@ if __name__ == "__main__":
     )
 
     # Dipole magnitude: depends hugely on magnet; start small and increase.
-    dipole_magnitude = 0.15  # A·m^2 (toy starting value)
+    dipole_magnitude = 0.3  # A·m^2 (toy starting value)
 
     # Interaction: softened dipole-dipole
     interaction = DipoleDipoleSoftened(eps=0.008)  # 8 mm softening ~ magnet size
@@ -315,18 +332,20 @@ if __name__ == "__main__":
         params=params,
         dipole_magnitude=dipole_magnitude,
         interactions=[interaction],
+        # optional: override signs if you want a different pattern
+        dipole_signs=np.array([-1, +1, -1], dtype=float)
     )
 
     # Initial condition: lift leftmost bob
     theta0 = np.zeros(N)
     omega0 = np.zeros(N)
-    theta0[0] = np.deg2rad(20)
+    theta0[0] = np.deg2rad(-20)
 
-    dt = 1e-3
-    T = 6.0
+    dt = 1e-5
+    T = 20
     steps = int(T / dt)
 
-    result = chain.simulate(theta0, omega0, dt=dt, steps=steps, record_every=10)
+    result = chain.simulate(theta0, omega0, dt=dt, steps=steps, record_every=100)
 
     # Quick textual sanity output
     print("Simulated frames:", len(result["t"]))
@@ -342,16 +361,19 @@ if __name__ == "__main__":
         header = ["time"]
         for i in range(N):
             header.append(f"theta_{i}_rad")
-        for i in range(N):
             header.append(f"omega_{i}_rad_per_s")
+            
         writer.writerow(header)
         
         # Write data rows
         for idx, t in enumerate(result["t"]):
             row = [t]
             row.extend(result["theta"][idx])
-            row.extend(result["omega"][idx])
+            row.extend(result["omega"][idx])  
             writer.writerow(row)
     
     print(f"Results saved to {csv_filename}")
+
+    
+    save_result_npz(result, "run1.npz")
     
