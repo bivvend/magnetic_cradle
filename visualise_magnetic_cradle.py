@@ -26,8 +26,10 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
+import shutil
 from typing import Optional, Dict, Any
 
+import matplotlib as mpl
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
@@ -204,16 +206,25 @@ def animate_cradle(
         return (rods, bobs, time_text, *trail_lines)
 
     anim = FuncAnimation(
-        fig,
-        update,
-        frames=len(frame_ids),
-        init_func=init,
-        interval=1000 / fps,
-        blit=True,
-    )
+    fig,
+    update,
+    frames=len(frame_ids),
+    init_func=init,
+    interval=1000 / fps,
+    blit=False,   # safer for saving
+)
 
     if save_mp4:
-        anim.save(save_mp4, dpi=200)
+        # Try to use ffmpeg if available (best for mp4)
+        ffmpeg_path = shutil.which("ffmpeg")
+        if ffmpeg_path is None:
+            raise RuntimeError(
+                "ffmpeg not found on PATH, cannot save mp4. "
+                "Install ffmpeg or run without --save_mp4."
+            )
+
+        writer = mpl.animation.FFMpegWriter(fps=fps, bitrate=1800)
+        anim.save(save_mp4, writer=writer, dpi=200)
     if show:
         plt.show()
     else:

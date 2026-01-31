@@ -312,11 +312,11 @@ if __name__ == "__main__":
     N = 3
     params = PendulumChainParams(
         N=N,
-        m=0.01,          # 10 g bobs
+        m=0.02,          # 20 g bobs
         L=0.25,          # 25 cm pendulum
         d=0.05,          # 5 cm pivot spacing
         g=9.81,
-        pivot_damping_c=1e-4,  # small damping; set 0 for conservative
+        pivot_damping_c=1e-5,  # small damping; set 0 for conservative
     )
 
     # Dipole magnitude: depends hugely on magnet; start small and increase.
