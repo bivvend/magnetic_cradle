@@ -244,7 +244,7 @@ class PlanarPendulumChain:
         return a
 
     # --- Time integration (RK4) ---
-
+    ##Runge–Kutta 4th order method for coupled first-order ODEs.
     def step_rk4(self, theta: np.ndarray, omega: np.ndarray, dt: float) -> Tuple[np.ndarray, np.ndarray]:
         """
         One RK4 step for the coupled system:
@@ -341,7 +341,7 @@ if __name__ == "__main__":
     omega0 = np.zeros(N)
     theta0[0] = np.deg2rad(-20)
 
-    dt = 1e-5
+    dt = 1e-4
     T = 20
     steps = int(T / dt)
 
